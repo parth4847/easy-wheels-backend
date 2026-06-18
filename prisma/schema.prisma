@@ -1,0 +1,127 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER   // This is the Fleet Owner
+  ADMIN  // This is You (The Super Admin)
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique   // <--- Replaced phoneNumber
+  name          String
+  role          Role     @default(USER)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  
+  // ... rest of the relations stay exactly the same
+  
+  // A Fleet Owner strictly owns all of this data:
+  drivers       Driver[]
+  vehicles      Vehicle[]
+  trips         Trip[]
+  expenses      Expense[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model Driver {
+  id            String   @id @default(uuid())
+  name          String
+  phoneNumber   String   
+  licenseExpiry DateTime?
+  salary        Float    @default(0.0)
+  createdAt     DateTime @default(now())
+
+  userId        String   // Links driver to the specific Fleet Owner
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  vehicles      Vehicle[] 
+  trips         Trip[]    
+}
+
+model Vehicle {
+  id             String   @id @default(uuid())
+  plateNo        String   @unique 
+  vehicleType    String   @default("Truck")
+  insuranceExpiry DateTime?
+  permitExpiry   DateTime?
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  userId         String   // Links truck to the specific Fleet Owner
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  driverId       String?  
+  driver         Driver?  @relation(fields: [driverId], references: [id])
+  
+  trips          Trip[]
+  expenses       Expense[]
+}
+
+model Trip {
+  id          String   @id @default(uuid())
+  tripDate    DateTime @default(now())
+  source      String?
+  destination String?
+  driverFare  Float    @default(0.0)
+  income      Float    @default(0.0) 
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  userId      String   // Links trip to the specific Fleet Owner
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  
+  driverId    String
+  driver      Driver   @relation(fields: [driverId], references: [id])
+
+  expenses    Expense[]
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  category    String   
+  amount      Float
+  notes       String?  @db.Text
+  receiptUrl  String?  
+  createdAt   DateTime @default(now())
+
+  userId      String   // Links expense to the specific Fleet Owner
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tripId      String?  
+  trip        Trip?    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  vehicleId   String?  
+  vehicle     Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   
+  details   String   @db.Text
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
