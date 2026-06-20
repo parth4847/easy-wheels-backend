@@ -13,6 +13,9 @@ const prisma = new PrismaClient();
 app.use(cors());
 app.use(express.json());
 
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 const otpStore = new Map();
 
 // ==========================================
