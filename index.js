@@ -19,17 +19,17 @@ dns.setDefaultResultOrder('ipv4first');
 const otpStore = new Map();
 
 // ==========================================
-// EMAIL CONFIGURATION
+// EMAIL CONFIGURATION (STRICT IPv4)
 // ==========================================
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,
   secure: true,
+  family: 4, // <-- THIS IS THE MAGIC FIX. It forces the socket to strictly use IPv4.
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // NEW FIX: Force Node to use IPv4 instead of IPv6 to bypass Render's network bug
   tls: {
     rejectUnauthorized: false
   }
