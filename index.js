@@ -16,15 +16,22 @@ app.use(express.json());
 const otpStore = new Map();
 
 // ==========================================
-// Initialize the Email Engine (The Transporter)
+// EMAIL CONFIGURATION
 // ==========================================
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    pass: process.env.EMAIL_PASS,
+  },
+  // NEW FIX: Force Node to use IPv4 instead of IPv6 to bypass Render's network bug
+  tls: {
+    rejectUnauthorized: false
   }
 });
+
 
 // ==========================================
 // MIDDLEWARE: The SaaS "Bouncer" 
