@@ -98,7 +98,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     if (!user) {
       // NOTE: Update 'process.env.EMAIL_USER' check below to match your actual admin email string 
       // since EMAIL_USER is no longer used for sending mail. Or just hardcode your admin email here.
-      const role = email === "YOUR_ADMIN_EMAIL@gmail.com" ? "ADMIN" : "USER"; 
+      const role = email === "parthshinde4847@gmail.com" ? "ADMIN" : "USER"; 
       user = await prisma.user.create({
         data: { email, name: "Fleet Owner", role }
       });
