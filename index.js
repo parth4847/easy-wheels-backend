@@ -4,8 +4,13 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const exceljs = require('exceljs');
-const nodemailer = require('nodemailer'); // <-- MUST BE HERE
 const cron = require('node-cron');
+
+// ==========================================
+// EMAIL API CONFIGURATION (RESEND)
+// ==========================================
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 const prisma = new PrismaClient();
@@ -13,28 +18,7 @@ const prisma = new PrismaClient();
 app.use(cors());
 app.use(express.json());
 
-const dns = require('dns');
-dns.setDefaultResultOrder('ipv4first');
-
 const otpStore = new Map();
-
-// ==========================================
-// EMAIL CONFIGURATION (STRICT IPv4)
-// ==========================================
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  family: 4, // <-- THIS IS THE MAGIC FIX. It forces the socket to strictly use IPv4.
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
-
 
 // ==========================================
 // MIDDLEWARE: The SaaS "Bouncer" 
@@ -68,14 +52,15 @@ app.post('/api/auth/request-otp', async (req, res) => {
   otpStore.set(email, otp);
   setTimeout(() => otpStore.delete(email), 5 * 60 * 1000);
 
-  console.log(`⏳ Attempting to send OTP ${otp} via Google Mail Servers...`);
+  console.log(`⏳ Attempting to send OTP ${otp} via Resend HTTP API...`);
 
   try {
-    await transporter.sendMail({
-      from: `"Easy Wheels Command" <${process.env.EMAIL_USER}>`,
+    // UPDATED: Using Resend instead of Nodemailer
+    await resend.emails.send({
+      from: 'Easy Wheels <onboarding@resend.dev>', // Resend's free testing address
       to: email,
       subject: "Your Easy Wheels Login Code",
-      text: `Welcome back to Fleet Command. Your secure login OTP is: ${otp}\n\nThis code expires in 5 minutes.`
+      html: `<p>Welcome back to Fleet Command.</p><p>Your secure login OTP is: <strong>${otp}</strong></p><p>This code expires in 5 minutes.</p>`
     });
     
     console.log(`✅ SUCCESS: Email sent to ${email}`);
@@ -111,7 +96,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   try {
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      const role = email === process.env.EMAIL_USER ? "ADMIN" : "USER"; 
+      // NOTE: Update 'process.env.EMAIL_USER' check below to match your actual admin email string 
+      // since EMAIL_USER is no longer used for sending mail. Or just hardcode your admin email here.
+      const role = email === "YOUR_ADMIN_EMAIL@gmail.com" ? "ADMIN" : "USER"; 
       user = await prisma.user.create({
         data: { email, name: "Fleet Owner", role }
       });
@@ -826,22 +813,17 @@ app.get('/api/admin/reports/:userId', authenticateToken, async (req, res) => {
 // ==========================================
 // CRON JOB: Automated Monthly Excel Delivery
 // ==========================================
-// Test Mode: '* * * * *' (Runs every 1 minute)
-// Production Mode: '0 8 1 * *' (Runs at 8:00 AM on the 1st of every month)
-
 // Runs at 8:00 AM on the 1st day of every month
 cron.schedule('0 8 1 * *', async () => {
   console.log("\n🕒 CRON TRIGGERED: Generating Fleet Reports...");
   
   try {
-    // 1. Find every active Fleet Owner in the database
     const owners = await prisma.user.findMany({ 
       where: { role: 'USER', isActive: true } 
     });
 
     if (owners.length === 0) return console.log("No active fleet owners found.");
 
-    // 2. Define the exact timeframe (Current Month for testing)
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0,0,0,0);
@@ -849,7 +831,6 @@ cron.schedule('0 8 1 * *', async () => {
     for (const owner of owners) {
       console.log(`📊 Processing data for: ${owner.email}`);
 
-      // 3. Fetch their specific data
       const trips = await prisma.trip.findMany({
         where: { userId: owner.id, tripDate: { gte: startOfMonth } },
         include: { vehicle: true, driver: true }
@@ -859,12 +840,10 @@ cron.schedule('0 8 1 * *', async () => {
         include: { vehicle: true }
       });
 
-      // 4. Calculate Totals
       const totalRevenue = trips.reduce((sum, trip) => sum + trip.income, 0);
       const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
       const netProfit = totalRevenue - totalExpenses;
 
-      // 5. Build the Excel Workbook in memory (No saving to hard drive!)
       const workbook = new exceljs.Workbook();
       
       const summarySheet = workbook.addWorksheet('Financial Summary');
@@ -877,20 +856,18 @@ cron.schedule('0 8 1 * *', async () => {
       tripSheet.columns = [{ header: 'Date', key: 'date', width: 15 }, { header: 'Plate', key: 'plate', width: 15 }, { header: 'Income (₹)', key: 'income', width: 15 }];
       trips.forEach(t => tripSheet.addRow({ date: t.tripDate.toLocaleDateString(), plate: t.vehicle.plateNo, income: t.income }));
 
-      // Convert workbook to an email-ready buffer
       const excelBuffer = await workbook.xlsx.writeBuffer();
 
-      // 6. Fire the Email
-      await transporter.sendMail({
-        from: `"Easy Wheels Reports" <${process.env.EMAIL_USER}>`,
+      // UPDATED: Using Resend to email the Excel attachment
+      await resend.emails.send({
+        from: 'Easy Wheels <onboarding@resend.dev>',
         to: owner.email,
         subject: `Your Automated Fleet Report`,
-        text: `Hello from Easy Wheels,\n\nYour latest fleet report has been generated.\n\nTotal Revenue: ₹${totalRevenue}\nTotal Expenses: ₹${totalExpenses}\nNet Profit: ₹${netProfit}\n\nPlease find your detailed Excel breakdown attached.\n\nDrive safe!`,
+        html: `<p>Hello from Easy Wheels,</p><p>Your latest fleet report has been generated.</p><ul><li>Total Revenue: ₹${totalRevenue}</li><li>Total Expenses: ₹${totalExpenses}</li><li>Net Profit: ₹${netProfit}</li></ul><p>Please find your detailed Excel breakdown attached.</p><p>Drive safe!</p>`,
         attachments: [
           {
             filename: `Fleet_Report.xlsx`,
-            content: excelBuffer,
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            content: excelBuffer
           }
         ]
       });
@@ -905,5 +882,5 @@ cron.schedule('0 8 1 * *', async () => {
 // Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 SaaS API running on http://localhost:${PORT}`);
+  console.log(`🚀 SaaS API running on port ${PORT}`);
 });
