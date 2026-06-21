@@ -95,12 +95,22 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
   try {
     let user = await prisma.user.findUnique({ where: { email } });
+    
+    // Put your exact Gmail address inside the quotes below!
+    const MY_ADMIN_EMAIL = "parthshinde4847email@gmail.com"; 
+
     if (!user) {
-      // NOTE: Update 'process.env.EMAIL_USER' check below to match your actual admin email string 
-      // since EMAIL_USER is no longer used for sending mail. Or just hardcode your admin email here.
-      const role = email === "parthshinde4847@gmail.com" ? "ADMIN" : "USER"; 
+      // 1. If you are a brand new user, create as Admin if emails match
+      const role = email === MY_ADMIN_EMAIL ? "ADMIN" : "USER"; 
       user = await prisma.user.create({
         data: { email, name: "Fleet Owner", role }
+      });
+    } else if (email === MY_ADMIN_EMAIL && user.role !== "ADMIN") {
+      // 2. THE FIX: If you already logged in by mistake and got stuck as a 'USER', 
+      // this will forcefully upgrade you to 'ADMIN' the next time you log in!
+      user = await prisma.user.update({
+        where: { email },
+        data: { role: "ADMIN" }
       });
     }
 
