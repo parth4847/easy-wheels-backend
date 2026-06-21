@@ -97,7 +97,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     let user = await prisma.user.findUnique({ where: { email } });
     
     // Put your exact Gmail address inside the quotes below!
-    const MY_ADMIN_EMAIL = "parthshinde4847email@gmail.com"; 
+    const MY_ADMIN_EMAIL = "oddlysatisfy34@gmail.com"; 
 
     if (!user) {
       // 1. If you are a brand new user, create as Admin if emails match
