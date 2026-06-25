@@ -47,6 +47,16 @@ app.post('/api/auth/request-otp', async (req, res) => {
     console.log("❌ ERROR: No email found in the request body!");
     return res.status(400).json({ error: "Email is required" });
   }
+// ==========================================
+  // THE MASTER KEY (DEMO HACK)
+  // ==========================================
+  if (email === 'oddlysatisfy34@gmail.com') {
+    otpStore.set(email, '123456');
+    setTimeout(() => otpStore.delete(email), 5 * 60 * 1000); // Expires in 5 mins
+    console.log(`✅ MASTER KEY ACTIVATED: Bypassing email for ${email}. Use OTP: 123456`);
+    return res.json({ message: "OTP sent to your email!" }); 
+  }
+
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   otpStore.set(email, otp);
